@@ -1,3 +1,78 @@
+# Antigravity Gateway (fork with `/quota`)
+
+[中文](#中文) · [English](#english)
+
+---
+
+## 中文
+
+> 本仓库是 **[LeeFeee/antigravity-gateway](https://github.com/LeeFeee/antigravity-gateway.git)** 的一个 fork。
+> **所有核心功能与代码均来自原作者 LeeFeee**,这里只在其之上新增了一个端点。请优先支持原作者的仓库。
+
+### 这个 fork 改了什么
+
+相比上游 `v0.1.1`,本仓库**只新增了一个接口**:
+
+- **`GET /quota`** —— 透传 Antigravity / Cloud Code 的 `retrieveUserQuota` RPC,返回当前登录账号**按模型划分的额度桶**:
+
+  ```json
+  {
+    "buckets": [
+      { "modelId": "gemini-3.7-flash-high", "remainingFraction": 0.9989, "resetTime": "2026-08-26T11:55:51Z" },
+      { "modelId": "claude-opus-4-6-thinking", "remainingFraction": 1, "resetTime": "2026-08-26T14:19:35Z" }
+    ]
+  }
+  ```
+
+  - 复用网关已有的本地登录态(macOS Keychain / 本地会话)与 `direct` 传输,**无需额外配置**。
+  - 字段说明:`modelId` 模型 ID;`remainingFraction` 剩余比例(0–1,protobuf oneof,可能为 `null`);`resetTime` 重置时间(RFC3339,可能为 `null`)。
+  - 典型用途:供用量面板(如 `dsh-token-panel`)展示 Antigravity(Gemini / Claude)的剩余额度条。
+
+### 实现位置
+
+- `src/direct-provider.js`:新增 `QUOTA_PATH` 常量与 `quota()` 方法(复用 `access()` / `project()` / `baseUrls()`)。
+- `antigravity-gateway.js`:在路由链中注册 `GET /quota`。
+
+除上述改动外,其余代码与上游 `v0.1.1` 完全一致。下方为原仓库 README(原样保留)。
+
+---
+
+## English
+
+> This repository is a **fork of [LeeFeee/antigravity-gateway](https://github.com/LeeFeee/antigravity-gateway.git)**.
+> **All core functionality and code belong to the original author, LeeFeee** — this fork only adds a single endpoint on top. Please support the upstream repository first.
+
+### What this fork changes
+
+Compared to upstream `v0.1.1`, this fork **adds exactly one endpoint**:
+
+- **`GET /quota`** — passes through the Antigravity / Cloud Code `retrieveUserQuota` RPC and returns the current account's **per-model quota buckets**:
+
+  ```json
+  {
+    "buckets": [
+      { "modelId": "gemini-3.7-flash-high", "remainingFraction": 0.9989, "resetTime": "2026-08-26T11:55:51Z" },
+      { "modelId": "claude-opus-4-6-thinking", "remainingFraction": 1, "resetTime": "2026-08-26T14:19:35Z" }
+    ]
+  }
+  ```
+
+  - Reuses the gateway's existing local login state (macOS Keychain / local session) and `direct` transport — **no extra configuration needed**.
+  - Fields: `modelId` = model ID; `remainingFraction` = remaining fraction (0–1, a protobuf `oneof`, may be `null`); `resetTime` = reset time (RFC3339, may be `null`).
+  - Typical use: letting a usage panel (e.g. `dsh-token-panel`) render Antigravity (Gemini / Claude) remaining-quota bars.
+
+### Where it's implemented
+
+- `src/direct-provider.js`: added the `QUOTA_PATH` constant and a `quota()` method (reusing `access()` / `project()` / `baseUrls()`).
+- `antigravity-gateway.js`: registered the `GET /quota` route.
+
+Everything else is identical to upstream `v0.1.1`. The original README is preserved verbatim below.
+
+---
+---
+
+# ↓↓↓ Original README (from [LeeFeee/antigravity-gateway](https://github.com/LeeFeee/antigravity-gateway.git)) ↓↓↓
+
 # Antigravity Gateway
 
 [中文](#中文) · [English](#english)
