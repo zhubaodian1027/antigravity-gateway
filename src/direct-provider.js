@@ -13,6 +13,7 @@ const LOAD_CODE_ASSIST_PATH = '/v1internal:loadCodeAssist';
 const GENERATE_PATH = '/v1internal:generateContent';
 const STREAM_PATH = '/v1internal:streamGenerateContent';
 const MODELS_PATH = '/v1internal:fetchAvailableModels';
+const QUOTA_PATH = '/v1internal:retrieveUserQuota';
 const MODEL_DISCOVERY_TIMEOUT_MS = Number(process.env.ANTIGRAVITY_DIRECT_MODEL_DISCOVERY_TIMEOUT_MS || 3000);
 const DEFAULT_USER_AGENT = `antigravity/cli/${process.env.ANTIGRAVITY_CLI_VERSION || '1.1.18'} (aidev_client; os_type=${process.platform}; arch=${process.arch}; auth_method=consumer)`;
 const MODEL_SLUG = /^[a-z0-9][a-z0-9._-]{0,127}$/i;
@@ -501,6 +502,41 @@ class DirectAntigravityProvider {
     this.projectLoaded = true;
     if (!this.projectId) throw new DirectProviderError('Antigravity project discovery 未返回 project ID，请设置 ANTIGRAVITY_PROJECT_ID。', { code: 'direct_project_missing', status: 400 });
     return this.projectId;
+  }
+
+  async quota(signal) {
+    const token = await this.access(signal);
+    let project = '';
+    try { project = await this.project(signal, token); } catch { project = ''; } // consumer 账号允许空 project
+    const body = JSON.stringify(project ? { project } : {});
+    let response;
+    let text = '';
+    for (const base of this.baseUrls()) {
+      try {
+        response = await this.fetchImpl(`${base}${QUOTA_PATH}`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', accept: 'application/json', 'user-agent': this.userAgent },
+          body,
+          signal
+        });
+        text = await readBody(response);
+        if (response.ok || response.status < 500) break;
+      } catch (error) {
+        if (base === this.baseUrls().at(-1)) throw new DirectProviderError('Antigravity 额度查询失败。', { code: 'direct_quota_failed', status: 502, details: redact(error.message), cause: error });
+      }
+    }
+    if (!response?.ok) throw new DirectProviderError('Antigravity 额度查询失败。', { code: 'direct_quota_failed', status: response?.status || 502, details: redact(text) });
+    let parsed;
+    try { parsed = JSON.parse(text || '{}'); } catch (error) { throw new DirectProviderError('Antigravity 额度响应不是 JSON。', { code: 'direct_quota_invalid', status: 502, cause: error }); }
+    // remainingFraction / remainingAmount 是 oneof，可能缺省；归一化 camelCase / snake_case 两种字段名
+    const buckets = (Array.isArray(parsed.buckets) ? parsed.buckets : []).map((b) => ({
+      modelId: String(b?.modelId ?? b?.model_id ?? ''),
+      remainingFraction: typeof b?.remainingFraction === 'number' ? b.remainingFraction
+        : (typeof b?.remaining_fraction === 'number' ? b.remaining_fraction : null),
+      resetTime: typeof b?.resetTime === 'string' ? b.resetTime
+        : (typeof b?.reset_time === 'string' ? b.reset_time : null)
+    })).filter((b) => b.modelId);
+    return { buckets };
   }
 
   async listModels(signal) {

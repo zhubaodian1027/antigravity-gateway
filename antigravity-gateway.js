@@ -648,6 +648,11 @@ async function requestHandler(req, res) {
       });
       return;
     }
+    if (req.method === 'GET' && route === '/quota') {
+      const quota = await DIRECT_PROVIDER.quota(controller.signal);
+      sendJson(res, 200, quota);
+      return;
+    }
     if (req.method === 'POST' && route === '/v1/messages/count_tokens') {
       const payload = await readJson(req);
       const text = JSON.stringify(payload.system || '') + JSON.stringify(payload.messages || []) + JSON.stringify(payload.tools || []);
