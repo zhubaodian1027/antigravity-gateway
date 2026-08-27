@@ -469,7 +469,7 @@ function createChatTextEmitter(res, model) {
       emittedText += text;
       res.write(`data: ${JSON.stringify({ id, object: 'chat.completion.chunk', created, model, choices: [{ index: 0, delta: { content: text }, finish_reason: null }] })}\n\n`);
     },
-    finish: (body) => {
+    finish: (body, includeUsage = false) => {
       start();
       const finalText = body.choices?.[0]?.message?.content || '';
       if (finalText && !emittedText) {
@@ -480,6 +480,9 @@ function createChatTextEmitter(res, model) {
       }
       const finishReason = body.choices?.[0]?.finish_reason || 'stop';
       res.write(`data: ${JSON.stringify({ id, object: 'chat.completion.chunk', created, model, choices: [{ index: 0, delta: {}, finish_reason: finishReason }] })}\n\n`);
+      if (includeUsage && body.usage) {
+        res.write(`data: ${JSON.stringify({ id, object: 'chat.completion.chunk', created, model, choices: [], usage: body.usage })}\n\n`);
+      }
       res.write('data: [DONE]\n\n');
       res.end();
     }
@@ -512,7 +515,7 @@ function emitAnthropicStream(res, body) {
   res.end();
 }
 
-function emitChatStream(res, body) {
+function emitChatStream(res, body, includeUsage = false) {
   if (!res.headersSent) res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
   const choice = body.choices[0];
   const first = { role: 'assistant' };
@@ -520,6 +523,9 @@ function emitChatStream(res, body) {
   if (choice.message.tool_calls) first.tool_calls = choice.message.tool_calls.map((call, index) => ({ index, ...call }));
   res.write(`data: ${JSON.stringify({ id: body.id, object: 'chat.completion.chunk', created: body.created, model: body.model, choices: [{ index: 0, delta: first, finish_reason: null }] })}\n\n`);
   res.write(`data: ${JSON.stringify({ id: body.id, object: 'chat.completion.chunk', created: body.created, model: body.model, choices: [{ index: 0, delta: {}, finish_reason: choice.finish_reason }] })}\n\n`);
+  if (includeUsage && body.usage) {
+    res.write(`data: ${JSON.stringify({ id: body.id, object: 'chat.completion.chunk', created: body.created, model: body.model, choices: [], usage: body.usage })}\n\n`);
+  }
   res.write('data: [DONE]\n\n');
   res.end();
 }
@@ -569,8 +575,8 @@ async function handleChat(payload, req, res, signal) {
   let result;
   try { result = await runTurn(normalized, model, signal, { sessionId: clientScope(req), onDelta: liveEmitter?.onDelta }); } finally { stopHeartbeat?.(); }
   const body = chatResponse(normalized.model || model, result);
-  if (liveEmitter) liveEmitter.finish(body);
-  else if (normalized.stream) emitChatStream(res, body); else sendJson(res, 200, body, { 'x-antigravity-model': model });
+  if (liveEmitter) liveEmitter.finish(body, normalized.includeUsage);
+  else if (normalized.stream) emitChatStream(res, body, normalized.includeUsage); else sendJson(res, 200, body, { 'x-antigravity-model': model });
 }
 
 async function handleResponses(payload, req, res, signal) {

@@ -205,7 +205,9 @@ function normalizeChat(payload) {
     protocol: 'chat', model: payload.model, system: systemParts.join('\n'), messages,
     tools: normalizeTools(payload.tools, 'chat'), toolChoice: payload.tool_choice,
     generationConfig: generationConfigFrom(payload),
-    stream: Boolean(payload.stream), structuredSchema: payload.response_format?.type === 'json_schema'
+    stream: Boolean(payload.stream),
+    includeUsage: payload.stream_options?.include_usage === true,
+    structuredSchema: payload.response_format?.type === 'json_schema'
       ? payload.response_format.json_schema?.schema : null, autoMode: false
   };
 }
